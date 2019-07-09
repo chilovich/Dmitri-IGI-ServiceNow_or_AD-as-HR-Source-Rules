@@ -1,0 +1,218 @@
+when
+    event : EventInternalBean(  )  
+    userBean : UserBean(  )  
+	externalInfo : ExternalInfo( )
+then
+// Ver. 1.0; D.Chilovich IBM; 2019-04-29 - find Department Service-Now reference ID from Account Owner OUs; from IB supporting Data Tables
+
+logger.info("event Bean: " + event );
+logger.info("user Bean: " + userBean );
+logger.info("externalInfo Bean: " + externalInfo );
+
+logger.info("User Service-Now Account MOdify Rule is processing account: " + event.getUserID() );
+
+String userTargetName = null;
+String accountOwnerOUCode = null;
+String accountDepartmentSysID = null;
+
+// Get Account Application Target
+if ( event.getTarget() != null ) {  userTargetName = event.getTarget(); }
+
+// Determine by application account belongs to - should owner be created or modified.
+if ( userTargetName != null ) {
+	if ( userTargetName.equals("Service-now Democenter") && account.getPerson_id() != null ) {
+		logger.info("Account belongs to application under IGI Marker " + userTargetName  + ". Owner User " + account.getPerson_id() + " OU will be used for Account Department.");
+	} else if ( userTargetName.equals("Service-now Democenter") && account.getPerson_id() == null ) {
+		logger.info("Account belongs to application under IGI Marker " + userTargetName  + "; but has no owner. Account will be created in default OU.");
+		return;
+	} else {
+		logger.info("Account belongs to application under IGI Marker " + userTargetName  + "; owner User will not be created or modified!");
+		return;
+	}
+  } else {
+logger.info("Account belongs to null application!");
+return;
+}
+
+// Get Account Owner OU name
+accountOwnerOUCode = userBean.getOrganizationalunit_code();
+if ( userTargetName != null ) {
+ logger.info("Account Owner OU Code was found as: " + accountOwnerOUCode);
+ } else {
+  logger.info("Account Owner OU Code is empty; setting account OU as HR. ");
+  accountOwnerOUCode = "HR";
+ }
+	
+// Determine Account Owner OU name from account and IB
+// We need to retrieve service ID info from IBroker
+IBRestClient client = new IBRestClient();
+															
+// Retrieve the ServiceId (target id)
+String serviceID;
+try {
+	serviceID = client.getIBServiceId(event.getTarget(); sql);
+	logger.info("Service ID: " + serviceID );
+} catch (Exception e) {
+	logger.error("Error getting Identity Brokerage Service ID");
+	logger.error(e);
+	return;
+}
+
+// Get the Department SysID from IB_RE_SUPPORTING_DATA via account owner OU name
+// find OU sys id supp data in IB
+String DepartmentCLOB_QUERY = "select cast(SUPPORTING_DATA_JSON as varchar(32000)) from ITIMUSER.IB_RE_SUPPORTING_DATA WHERE target_id = '" + serviceID + "' and NAME = 'erServiceNowDepartmentName=" + accountOwnerOUCode + "'";
+ResultSet rs = sql.getCntSQL().getConnection().createStatement().executeQuery(DepartmentCLOB_QUERY);
+logger.info("EXECUTE QUERY: " + DepartmentCLOB_QUERY);
+
+String DepartmentCLOB = null;
+String DepartmentCLOB_Present = null;
+
+while (rs.next()) {
+	
+	DepartmentCLOB = rs.getString(1);
+	logger.info("DepartmentCLOB: " + DepartmentCLOB );
+
+	if ( DepartmentCLOB.contains(accountOwnerOUCode)) {
+		// Parse CLOB of matching ID for Department Name
+		String [] DNArray = DepartmentCLOB.split("erservicenowdepartmentsysid");
+			logger.info("DNArray: " + DNArray[1] );
+		accountDepartmentSysID = DNArray[1].substring( DNArray[1].indexOf("[")+2; DNArray[1].indexOf("]")-1 );
+			logger.info("IB-Detected OU erservicenowdepartmentsysid: " + accountDepartmentSysID );
+	}
+}
+rs.close();
+
+// use Default OU for account; if it was not detected
+if ( accountDepartmentSysID == null ) {
+	accountDepartmentSysID = "93b25282c0a8000b0b55c8ab34e2f1e6";
+	logger.info("Using default accountDepartmentSysID: " + accountDepartmentSysID );
+} 
+
+// Update Account Bean with OU - Department sysID
+if (account.getId() != null && account.getPerson_id() != null) {
+		try {
+			//externalInfo.setAttribute("Department"; accountDepartmentSysID );
+			//account.setAttribute("ATTR5"; accountDepartmentSysID );
+			event.setValore4( accountDepartmentSysID );
+			_AccountAction.updateAccount( sql; account );
+			} catch (DBMSException e) {
+			throw new Exception("Creating Service-Now Account: " + account.getCode() + "; in OU: " + accountDepartmentSysID + " failed 1. Exiting.");
+			}
+		logger.info("Created Service-Now Account: " + account.getCode() + "; in OU: " + accountDepartmentSysID );
+		logger.info("Set account Bean as: " + account );
+		logger.info("Set externalInfo Bean as: " + externalInfo );
+} else {
+		logger.info("Creating Service-Now Account: " + account.getCode() + "; in OU: " + accountDepartmentSysID + " failed 2. Exiting.");
+		return;
+}
+
+
+============
+
+import com.engiweb.logger.impl.Log4JImpl
+import com.engiweb.profilemanager.backend.dao.db.SQLH
+import com.engiweb.profilemanager.common.bean.AccountBean
+import com.engiweb.profilemanager.common.bean.ExternalInfo
+import com.engiweb.profilemanager.common.bean.OrgUnitBean
+import com.engiweb.profilemanager.common.bean.PwdCfgBean
+import com.engiweb.profilemanager.common.bean.UserBean
+import com.engiweb.profilemanager.common.bean.UserErcBean
+import com.engiweb.profilemanager.common.bean.event.EventBean
+import com.engiweb.profilemanager.common.bean.event.EventInBean
+import com.engiweb.profilemanager.common.bean.event.EventOutBean
+import com.engiweb.profilemanager.common.ruleengine.action.UserAction
+import com.engiweb.profilemanager.common.ruleengine.action.UtilAction
+import com.engiweb.logger.impl.Log4JImpl
+import com.engiweb.profilemanager.backend.dao.db.SQLH
+import com.engiweb.pm.entity.BeanList
+import com.engiweb.profilemanager.common.bean.AccountBean
+import com.engiweb.profilemanager.common.bean.Block
+import com.engiweb.profilemanager.common.bean.OrgUnitBean
+import com.engiweb.profilemanager.common.bean.UserBean
+import com.engiweb.profilemanager.common.bean.ExternalInfo
+import com.engiweb.profilemanager.common.bean.entitlement.EntitlementBean
+import com.engiweb.profilemanager.common.bean.event.EntStateBean
+import com.engiweb.profilemanager.common.bean.event.EventTargetBean
+import com.engiweb.profilemanager.common.bean.event.EventInternalBean
+import com.engiweb.profilemanager.common.bean.rule.SyncStateBean
+import com.engiweb.profilemanager.common.ruleengine.action.EntitlementAction
+import com.engiweb.profilemanager.common.ruleengine.action.OrgUnitAction
+import com.engiweb.profilemanager.common.ruleengine.action.UserAction
+import com.engiweb.profilemanager.common.ruleengine.action.UtilAction
+import com.engiweb.toolkit.common.DBMSException
+import com.engiweb.profilemanager.common.bean.AccountAttrValueList
+import com.engiweb.profilemanager.common.interfaces.IAccountDirect
+import com.engiweb.toolkit.interfaces.JndiNames
+import com.engiweb.profilemanager.common.bean.targetattr.PwdManagementAttrValBean
+import common.direct.DirectFactory
+import com.engiweb.profilemanager.backend.business.direct.ApplicationDirect
+import com.engiweb.profilemanager.backend.business.direct.ExternalRoleDirect
+import com.engiweb.profilemanager.common.bean.FunctionalityTypeBean
+import com.engiweb.profilemanager.common.bean.entitlement.EntitlementBean
+import com.engiweb.profilemanager.common.bean.event.EntStateBean
+import com.engiweb.profilemanager.common.bean.rule.SyncStateBean
+import com.engiweb.profilemanager.common.bean.event.EventTargetBean
+import com.engiweb.profilemanager.common.ruleengine.action.ExtRoleAction
+import com.engiweb.profilemanager.common.ruleengine.action.RightsAction
+import com.ibm.igi.ib.wrapper.RightsCnt
+import java.util.List
+import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Iterator
+import java.util.HashMap
+import com.engiweb.pm.entity.BeanList
+import java.util.Set
+import com.engiweb.profilemanager.backend.utility.IBRestClient
+import com.engiweb.rpd.backend.business.direct.DomainDirect
+import com.engiweb.rpd.backend.business.direct.TaskDirect
+import com.engiweb.rpd.backend.business.direct.EntitlementDirect
+import com.engiweb.rpd.common.bean.DomainBean
+import com.engiweb.rpd.common.bean.EnvironmentBean
+import com.engiweb.rpd.common.bean.TaskBean
+import com.crossideas.ap.common.bean.SwimEntitlementBean
+import com.crossideas.ap.common.ruleengine.action.RequestGenerationRule
+import com.engiweb.logger.impl.Log4JImpl
+import com.engiweb.pm.dao.db.DAO
+import com.engiweb.pm.entity.BeanList
+import com.engiweb.pm.entity.Paging
+import com.engiweb.profilemanager.backend.dao.db.SQLH
+import com.engiweb.profilemanager.common.bean.AccountBean
+import com.engiweb.profilemanager.common.bean.ApplicationBean
+import com.engiweb.profilemanager.common.bean.Block
+import com.engiweb.profilemanager.common.bean.entitlement.EntitlementBean
+import com.engiweb.profilemanager.common.bean.event.EventBean
+import com.engiweb.profilemanager.common.bean.event.EventInBean
+import com.engiweb.profilemanager.common.bean.ExternalInfo
+import com.engiweb.profilemanager.common.bean.OrgUnitBean
+import com.engiweb.profilemanager.common.bean.OrgUnitErcBean
+import com.engiweb.profilemanager.common.bean.PwdCfgBean
+import com.engiweb.profilemanager.common.bean.UserBean
+import com.engiweb.profilemanager.common.bean.UserErcBean
+import com.engiweb.profilemanager.common.bean.UsrErcBean
+import com.engiweb.profilemanager.common.enumerations.EntitlementType
+import com.engiweb.profilemanager.common.enumerations.LockType
+import com.engiweb.profilemanager.common.ruleengine.action.JobRoleAction
+import com.engiweb.profilemanager.common.ruleengine.action.OrgUnitAction
+import com.engiweb.profilemanager.common.ruleengine.action.reorganize._AccountAction
+import com.engiweb.profilemanager.common.ruleengine.action.UserAction
+import com.engiweb.profilemanager.common.ruleengine.action.UtilAction
+import com.engiweb.toolkit.common.DBMSException
+import java.sql.ResultSet
+import java.sql.Statement
+import java.text.DateFormat
+import java.text.SimpleDateFormat
+import java.util.ArrayList
+import java.util.Date
+import java.util.List
+import java.util.TimeZone
+import com.engiweb.profilemanager.common.ruleengine.action.reorganize._EntitlementAction
+import com.engiweb.profilemanager.common.ruleengine.action.reorganize._UserAction
+import com.engiweb.profilemanager.common.ruleengine.action.reorganize._RightsAction
+import com.engiweb.profilemanager.common.ruleengine.action.reorganize.UserTypeAction
+
+global com.engiweb.profilemanager.backend.dao.db.SQLH sql
+global com.engiweb.logger.impl.Log4JImpl logger
+global com.engiweb.logger.impl.Log4JImpl logger
+global com.engiweb.profilemanager.backend.dao.db.SQLH sql
+global com.engiweb.pm.dao.db.DAO sql
+

@@ -1,0 +1,162 @@
+when
+    event : EventTargetBean(  )  
+    account : AccountBean(  )  
+    attributes : AccountAttrValueList(  )
+then
+// Ver. 1.1, D.Chilovich IBM, 2019-04-11 - add User-Modify Owner for all SN Accounts, add OUs from account erServiceNowDepartment ATTR map and IB Tables
+
+// Construct user attributes
+UserBean userBean = new UserBean(  );
+OrgUnitBean orgUnitBean = new OrgUnitBean(  );
+OrgUnitBean existUserOUBean = new OrgUnitBean(  );
+ExternalInfo externalInfo = new ExternalInfo(  );
+String userTargetName = null;
+String userName = null;
+String userSurname = null;
+String userMAIL = null;
+String userOU = null;
+String userDepartment = null;
+
+// User Attributes from Account object
+String userCode = event.getCode().toString();
+if ( account.getEmail() != null ) {  userMAIL = account.getEmail(); }
+if ( account.getSurname() != null ) {  userSurname = account.getSurname(); }
+if ( account.getName() != null ) {  userName = account.getName(); }
+if ( event.getTarget() != null ) {  userTargetName = event.getTarget(); }
+if ( event.getTarget() != null ) {  userDepartment = event.getAttr20(); }
+
+logger.info("Account Modify - Add Account Owner and OU Rule is processing account: " + userCode + ", " + userMAIL + ", " + userName + " " + userSurname );
+
+// Determine by application account belongs to - should owner be created.
+if ( userTargetName != null ) {
+	if ( userTargetName.equals("Service-now Democenter") ) {
+	logger.info("Account belongs to application under IGI Marker " + userTargetName  + ". Owner User will be created or modified.");
+	} else {
+		logger.info("Account belongs to application under IGI Marker " + userTargetName  + ". Owner User will not be created or modified!");
+		return;
+	}
+  } else {
+logger.info("Account belongs to null application!");
+return;
+}
+  
+// Determine if parent OU exists, add if missing
+String parentCode = "SNHR";
+OrgUnitBean parentBean = UtilAction.findOrgUnitByCode(sql, parentCode);
+
+if (parentBean == null) {
+     OrgUnitBean root = new OrgUnitBean();
+     root.setId(1L);
+     parentBean = UtilAction.createOrgUnit(sql, parentCode, parentCode, "", root, false, false);
+     logger.info("Account Owner Parent OU created with code: " + parentCode);
+}
+	
+// Determine Account Owner OU name from account and IB
+
+// We need to retrieve service ID info from IBroker
+IBRestClient client = new IBRestClient();
+															
+// Retrieve the ServiceId (target id)
+String serviceID;
+try {
+	serviceID = client.getIBServiceId(event.getTarget(), sql);
+	logger.info("Service ID: " + serviceID );
+} catch (Exception e) {
+	logger.error("Error getting Identity Brokerage Service ID");
+	logger.error(e);
+	return;
+}
+
+// Get the Department and other REF type attributes values from IB_RE_SUPPORTING_DATA via IDs coming from adapter
+// select cast(SERIALIZED_VALUE as varchar(32000)) from ITIMUSER.IB_RE_USERS where ID like '%%SNDemo%%' and  TARGET_ID = '4231562486491729335';
+// select cast(SUPPORTING_DATA_JSON as varchar(32000)) from ITIMUSER.IB_RE_SUPPORTING_DATA WHERE target_id = '4231562486491729335' and NAME like 'erServiceNowDepartmentName%';
+
+// find userCode supp data in IB
+String DepartmentCLOB_QUERY = "select cast(SUPPORTING_DATA_JSON as varchar(32000)) from ITIMUSER.IB_RE_SUPPORTING_DATA WHERE target_id = '" + serviceID + "' and NAME like 'erServiceNowDepartmentName%'";
+ResultSet rs = sql.getCntSQL().getConnection().createStatement().executeQuery(DepartmentCLOB_QUERY);
+logger.info("EXECUTE QUERY: " + DepartmentCLOB_QUERY);
+
+String DepartmentCLOB = null;
+String DepartmentCLOB_Present = null;
+
+while (rs.next()) {
+	
+	DepartmentCLOB = rs.getString(1);
+	logger.debug("DepartmentCLOB: " + DepartmentCLOB );
+
+	//DepartmentCLOB_Present = DepartmentCLOB.indexOf(userDepartment);
+	//if ( DepartmentCLOB_Present != null ) {
+	if ( DepartmentCLOB.contains(userDepartment)) {
+		// Parse CLOB of matching ID for Department Name
+		String [] DNArray = DepartmentCLOB.split("erservicenowdepartmentname");
+			logger.info("DNArray: " + DNArray[1] );
+		userOU = DNArray[1].substring( DNArray[1].indexOf("[")+2, DNArray[1].indexOf("]")-1 );
+			logger.info("IB-Detected OU: " + userOU );
+	}
+}
+rs.close();
+
+if ( userOU == null ) {
+  userOU = "SNHR";
+  logger.info("Using default OU: " + userOU );
+}
+
+logger.info("Creating Owner User for Account: " + userCode + ", in OU: " + userOU );
+
+// Determine if User OU exists, add if missing, add it under parent OU
+OrgUnitBean userOUBean = UtilAction.findOrgUnitByCode(sql, userOU);
+
+if (userOUBean == null) {
+    logger.info("Account Owner OU to be created with code: " + userOU);
+	try {
+		userOUBean = UtilAction.createOrgUnit(sql, userOU, userOU, "Created by Service-Now", parentBean, false, false);
+	 	} catch (DBMSException e) {
+		throw new Exception("Account Owner User OU " + userBean.getCode() + " create failed.");
+		}
+}
+
+// Construct new owner User
+orgUnitBean.setCode(userOU);
+userBean.setCode(userCode);
+if ( userMAIL != null ) { userBean.setEmail(userMAIL); }
+if ( userSurname != null ) { userBean.setSurname(userSurname); }
+if ( userName != null ) { userBean.setName(userName); }
+
+// create or modify account owner user in IGI, if it is based on SN Account
+if ( userTargetName != null ) {
+	if ( userTargetName.equals("Service-now Democenter")) {
+		try {
+			_UserAction.insertUser(sql, orgUnitBean, externalInfo, userBean );
+			} catch (DBMSException a) {
+				if (a.getErrorCode() == DBMSException.OBJECT_NOT_UNIQUE) {
+					// Modify User if exists
+					//try {
+					//	_UserAction.updateUser(sql, externalInfo, userBean);
+					//	} catch (DBMSException b) {
+					//	throw new Exception("Account Owner User " + userBean.getCode() + " exists already, modify failed.");
+					//	}
+						
+					// Compare and than Modify User's OU
+					try {
+						existUserOUBean = _UserAction.findOU(sql, userBean);
+						} catch (DBMSException c) {
+						throw new Exception("Account Owner User " + userBean.getCode() + " exists already, get OU failed.");
+						}
+					
+					// Move User to new OU ( getOrganizationalunittype_name or code )
+					if ( existUserOUBean.getCode().equals(userOU) ) {
+					} else {
+							try {
+								_UserAction.moveUser(sql, orgUnitBean, userBean);
+								} catch (DBMSException d) {
+								throw new Exception("Account Owner User " + userBean.getCode() + " exists already, move to new OU failed.");
+								}
+						}
+
+				} else {
+				throw a;
+				}
+			}
+		logger.info("Account " +  userCode + " Owner User " + userBean.getCode() + " created or modified.");
+	} 
+}

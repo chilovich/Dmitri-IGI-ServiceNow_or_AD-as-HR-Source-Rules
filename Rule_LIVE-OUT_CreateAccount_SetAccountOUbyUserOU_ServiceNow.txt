@@ -1,0 +1,105 @@
+when
+    event : EventOutBean(  )  
+    userBean : UserBean(  )  
+    orgUnitBean : OrgUnitBean(  )  
+    account : AccountBean(  )  
+    externalInfo : ExternalInfo(  )
+then
+// Ver. 1.1, D.Chilovich IBM, 2019-04-15 - find Department Service-Now reference ID from Account Owner OUs, from IB supporting Data Tables
+
+logger.info("Account Create Rule is processing account: " + event.getUserID() );
+
+String userTargetName = null;
+String accountOwnerOUCode = null;
+String accountDepartmentSysID = null;
+
+// Get Account Application Target
+if ( event.getTarget() != null ) {  userTargetName = event.getTarget(); }
+
+// Determine by application account belongs to - should owner be created or modified.
+if ( userTargetName != null ) {
+	if ( userTargetName.equals("Service-now Democenter") && account.getPerson_id() != null ) {
+		logger.info("Account belongs to application under IGI Marker " + userTargetName  + ". Owner User " + account.getPerson_id() + " OU will be used for Account Department.");
+	} else if ( userTargetName.equals("Service-now Democenter") && account.getPerson_id() == null ) {
+		logger.info("Account belongs to application under IGI Marker " + userTargetName  + ", but has no owner. Account will be created in default OU.");
+		return;
+	} else {
+		logger.info("Account belongs to application under IGI Marker " + userTargetName  + ", owner User will not be created or modified!");
+		return;
+	}
+  } else {
+logger.info("Account belongs to null application!");
+return;
+}
+
+// Get Account Owner OU name
+accountOwnerOUCode = userBean.getOrganizationalunit_code();
+if ( userTargetName != null ) {
+ logger.info("Account Owner OU Code was found as: " + accountOwnerOUCode);
+ } else {
+  logger.info("Account Owner OU Code is empty, setting account OU as HR. ");
+  accountOwnerOUCode = "HR";
+ }
+	
+// Determine Account Owner OU name from account and IB
+// We need to retrieve service ID info from IBroker
+IBRestClient client = new IBRestClient();
+															
+// Retrieve the ServiceId (target id)
+String serviceID;
+try {
+	serviceID = client.getIBServiceId(event.getTarget(), sql);
+	logger.info("Service ID: " + serviceID );
+} catch (Exception e) {
+	logger.error("Error getting Identity Brokerage Service ID");
+	logger.error(e);
+	return;
+}
+
+// Get the Department SysID from IB_RE_SUPPORTING_DATA via account owner OU name
+// find OU sys id supp data in IB
+String DepartmentCLOB_QUERY = "select cast(SUPPORTING_DATA_JSON as varchar(32000)) from ITIMUSER.IB_RE_SUPPORTING_DATA WHERE target_id = '" + serviceID + "' and NAME = 'erServiceNowDepartmentName=" + accountOwnerOUCode + "'";
+ResultSet rs = sql.getCntSQL().getConnection().createStatement().executeQuery(DepartmentCLOB_QUERY);
+logger.info("EXECUTE QUERY: " + DepartmentCLOB_QUERY);
+
+String DepartmentCLOB = null;
+String DepartmentCLOB_Present = null;
+
+while (rs.next()) {
+	
+	DepartmentCLOB = rs.getString(1);
+	logger.info("DepartmentCLOB: " + DepartmentCLOB );
+
+	if ( DepartmentCLOB.contains(accountOwnerOUCode)) {
+		// Parse CLOB of matching ID for Department Name
+		String [] DNArray = DepartmentCLOB.split("erservicenowdepartmentsysid");
+			logger.info("DNArray: " + DNArray[1] );
+		accountDepartmentSysID = DNArray[1].substring( DNArray[1].indexOf("[")+2, DNArray[1].indexOf("]")-1 );
+			logger.info("IB-Detected OU erservicenowdepartmentsysid: " + accountDepartmentSysID );
+	}
+}
+rs.close();
+
+// use Default OU for account, if it was not detected
+if ( accountDepartmentSysID == null ) {
+	accountDepartmentSysID = "93b25282c0a8000b0b55c8ab34e2f1e6";
+	logger.info("Using default accountDepartmentSysID: " + accountDepartmentSysID );
+} 
+
+// Update Account Bean with OU - Department sysID
+if (account.getId() != null && account.getPerson_id() != null) {
+		try {
+			externalInfo.setAttribute("Department", accountDepartmentSysID );
+			account.setAttribute("ATTR5", accountDepartmentSysID );
+			event.setValore4( accountDepartmentSysID );
+			_AccountAction.updateAccount( sql, account );
+			} catch (DBMSException e) {
+			throw new Exception("Creating Service-Now Account: " + account.getCode() + ", in OU: " + accountDepartmentSysID + " failed 1. Exiting.");
+			}
+		logger.info("Created Service-Now Account: " + account.getCode() + ", in OU: " + accountDepartmentSysID );
+		logger.info("Set account Bean as: " + account );
+		logger.info("Set externalInfo Bean as: " + externalInfo );
+} else {
+		logger.info("Creating Service-Now Account: " + account.getCode() + ", in OU: " + accountDepartmentSysID + " failed 2. Exiting.");
+		return;
+}

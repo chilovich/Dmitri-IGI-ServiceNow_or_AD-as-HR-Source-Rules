@@ -1,0 +1,128 @@
+import com.crossideas.ideasconnector.core.databean.Event
+import com.crossideas.ideasconnector.core.databean.DataBean
+import java.util.List
+import java.util.ArrayList
+import java.util.Map
+import java.util.HashMap
+import com.crossideas.ideasconnector.core.databean.Event
+import com.crossideas.ideasconnector.core.databean.DataBean
+import com.crossideas.ideasconnector.core.databean.DataBeanAttribute
+import java.util.List
+import java.util.ArrayList
+import java.util.Map
+import java.util.HashMap
+import com.engiweb.logger.impl.Log4JImpl
+import com.engiweb.profilemanager.backend.dao.db.SQLH
+import com.engiweb.profilemanager.common.bean.AccountBean
+import com.engiweb.profilemanager.common.bean.ExternalInfo
+import com.engiweb.profilemanager.common.bean.OrgUnitBean
+import com.engiweb.profilemanager.common.bean.PwdCfgBean
+import com.engiweb.profilemanager.common.bean.UserBean
+import com.engiweb.profilemanager.common.bean.UserErcBean
+import com.engiweb.profilemanager.common.bean.event.EventBean
+import com.engiweb.profilemanager.common.bean.event.EventInBean
+import com.engiweb.profilemanager.common.bean.event.EventOutBean
+import com.engiweb.profilemanager.common.ruleengine.action.UserAction
+import com.engiweb.profilemanager.common.ruleengine.action.UtilAction
+import com.engiweb.logger.impl.Log4JImpl
+import com.engiweb.profilemanager.backend.dao.db.SQLH
+import com.engiweb.pm.entity.BeanList
+import com.engiweb.profilemanager.common.bean.AccountBean
+import com.engiweb.profilemanager.common.bean.Block
+import com.engiweb.profilemanager.common.bean.OrgUnitBean
+import com.engiweb.profilemanager.common.bean.UserBean
+import com.engiweb.profilemanager.common.bean.ExternalInfo
+import com.engiweb.profilemanager.common.bean.entitlement.EntitlementBean
+import com.engiweb.profilemanager.common.bean.event.EntStateBean
+import com.engiweb.profilemanager.common.bean.event.EventTargetBean
+import com.engiweb.profilemanager.common.bean.rule.SyncStateBean
+import com.engiweb.profilemanager.common.ruleengine.action.EntitlementAction
+import com.engiweb.profilemanager.common.ruleengine.action.OrgUnitAction
+import com.engiweb.profilemanager.common.ruleengine.action.UserAction
+import com.engiweb.profilemanager.common.ruleengine.action.UtilAction
+import com.engiweb.toolkit.common.DBMSException
+import com.engiweb.profilemanager.common.bean.AccountAttrValueList
+import com.engiweb.profilemanager.common.interfaces.IAccountDirect
+import com.engiweb.toolkit.interfaces.JndiNames
+import com.engiweb.profilemanager.common.bean.targetattr.PwdManagementAttrValBean
+import common.direct.DirectFactory
+import com.engiweb.profilemanager.backend.business.direct.ApplicationDirect
+import com.engiweb.profilemanager.backend.business.direct.ExternalRoleDirect
+import com.engiweb.profilemanager.common.bean.FunctionalityTypeBean
+import com.engiweb.profilemanager.common.bean.entitlement.EntitlementBean
+import com.engiweb.profilemanager.common.bean.event.EntStateBean
+import com.engiweb.profilemanager.common.bean.rule.SyncStateBean
+import com.engiweb.profilemanager.common.bean.event.EventTargetBean
+import com.engiweb.profilemanager.common.ruleengine.action.ExtRoleAction
+import com.engiweb.profilemanager.common.ruleengine.action.RightsAction
+import com.ibm.igi.ib.wrapper.RightsCnt
+import java.util.List
+import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Iterator
+import java.util.HashMap
+import com.engiweb.pm.entity.BeanList
+import java.util.Set
+import com.engiweb.profilemanager.backend.utility.IBRestClient
+import com.engiweb.rpd.backend.business.direct.DomainDirect
+import com.engiweb.rpd.backend.business.direct.TaskDirect
+import com.engiweb.rpd.backend.business.direct.EntitlementDirect
+import com.engiweb.rpd.common.bean.DomainBean
+import com.engiweb.rpd.common.bean.EnvironmentBean
+import com.engiweb.rpd.common.bean.TaskBean
+import com.crossideas.ap.common.bean.SwimEntitlementBean
+import com.crossideas.ap.common.ruleengine.action.RequestGenerationRule
+import com.engiweb.logger.impl.Log4JImpl
+import com.engiweb.pm.dao.db.DAO
+import com.engiweb.pm.entity.BeanList
+import com.engiweb.pm.entity.Paging
+import com.engiweb.profilemanager.backend.dao.db.SQLH
+import com.engiweb.profilemanager.common.bean.AccountBean
+import com.engiweb.profilemanager.common.bean.ApplicationBean
+import com.engiweb.profilemanager.common.bean.Block
+import com.engiweb.profilemanager.common.bean.entitlement.EntitlementBean
+import com.engiweb.profilemanager.common.bean.event.EventBean
+import com.engiweb.profilemanager.common.bean.event.EventInBean
+import com.engiweb.profilemanager.common.bean.ExternalInfo
+import com.engiweb.profilemanager.common.bean.OrgUnitBean
+import com.engiweb.profilemanager.common.bean.OrgUnitErcBean
+import com.engiweb.profilemanager.common.bean.PwdCfgBean
+import com.engiweb.profilemanager.common.bean.UserBean
+import com.engiweb.profilemanager.common.bean.UserErcBean
+import com.engiweb.profilemanager.common.bean.UsrErcBean
+import com.engiweb.profilemanager.common.enumerations.EntitlementType
+import com.engiweb.profilemanager.common.enumerations.LockType
+import com.engiweb.profilemanager.common.ruleengine.action.JobRoleAction
+import com.engiweb.profilemanager.common.ruleengine.action.OrgUnitAction
+import com.engiweb.profilemanager.common.ruleengine.action.reorganize._AccountAction
+import com.engiweb.profilemanager.common.ruleengine.action.UserAction
+import com.engiweb.profilemanager.common.ruleengine.action.UtilAction
+import com.engiweb.toolkit.common.DBMSException
+import java.sql.ResultSet
+import java.sql.Statement
+import java.text.DateFormat
+import java.text.SimpleDateFormat
+import java.util.ArrayList
+import java.util.Date
+import java.util.List
+import java.util.TimeZone
+import com.engiweb.profilemanager.common.ruleengine.action.reorganize._EntitlementAction
+import com.engiweb.profilemanager.common.ruleengine.action.reorganize._UserAction
+import com.engiweb.profilemanager.common.ruleengine.action.reorganize._RightsAction
+import com.engiweb.profilemanager.common.ruleengine.action.reorganize.UserTypeAction
+
+global com.crossideas.ideasconnector.drivers.interfaces.Driver srcDriver
+global com.crossideas.ideasconnector.drivers.interfaces.Driver destDriver
+global com.crossideas.ideasconnector.common.xml.configuration.TargetDriver config
+global com.engiweb.logger.ILogger log
+global com.engiweb.pm.dao.db.DAO sql
+global com.crossideas.ideasconnector.drivers.interfaces.Driver srcDriver
+global com.crossideas.ideasconnector.drivers.interfaces.Driver destDriver
+global com.crossideas.ideasconnector.common.xml.configuration.TargetDriver config
+global com.engiweb.logger.ILogger log
+global com.engiweb.pm.dao.db.DAO sql
+global com.engiweb.profilemanager.backend.dao.db.SQLH sql
+global com.engiweb.logger.impl.Log4JImpl logger
+global com.engiweb.logger.impl.Log4JImpl logger
+global com.engiweb.profilemanager.backend.dao.db.SQLH sql
+global com.engiweb.pm.dao.db.DAO sql

@@ -1,0 +1,68 @@
+when
+    event : Event(  )
+then
+// ver.1.1. D.Chilovich; IBM. Rule gets ATTR4 from AGC Rules; and sets as Account department
+if ( event != null ) 
+{ 	
+	log.info("Event bean: " + event );
+
+	if ( event.getOperation() != null ) {
+	
+	// OPERATION 	The operation that is carried out with the event. Operations are represented by the following values:
+	// 	1: PERMISSION_ADD	2: PERMISSION_REMOVE	4: DELEGATION_ADD	5: DELEGATION_REMOVE	6: ACCOUNT_DISABLE
+	//	7: ACCOUNT_ENABLE	8: ACCOUNT_CREATE	9: ACCOUNT_REMOVE	10: ACCOUNT_MODIFY	11: ACCOUNT_PWDCHANGE	
+	//	12: RIGHT_ADD	13: RIGHT_REMOVE	14: RESOURCE_ADD	15: RESOURCE_REMOVE	16: USERROLE_ADD	17: USERROLE_REMOVE
+	//	Rule sets Department for 6;7;8;9;10
+		String operation = event.getEventAttribute("OPERATION").toString();
+		log.info("Event operation: " + operation );
+		if ( !operation.equals("8") && !operation.equals("10") ) return;
+
+	} else {
+		return;
+	}
+}
+
+DataBean data = event.getBean();
+if ( data != null ) log.info("Data bean: " + data );
+
+DataBeanAttribute snDept = data.getDataBeanAttribute("erServiceNowDepartment");
+
+if ( snDept != null ) 
+{
+	log.info("Account erServiceNowDepartment value: " + snDept);
+
+} else {
+	log.info("Will populate Account erServiceNowDepartment from Account Owner OU; feeded from IGI AGC Account Rule.");
+	String accountDepartmentSysID = null;
+	
+	String operationCode = event.getEventAttribute("CODE_OPERATION").toString();
+	log.info("Will populate Account erServiceNowDepartment for operationCode " + operationCode );
+	DataBeanAttribute accountCodeDataBean = data.getDataBeanAttribute("eruid");
+	String accountCode = accountCodeDataBean.getNewValue().toString();
+	log.info("Will populate Account erServiceNowDepartment for account: " + accountCode );
+	
+	// get Event Attr4 from EVENT_OUT Table; use it as Department for Account
+	// select attr4 from IGACORE.EVENT_OUT where COD_OPERATION = 'PM_3095943343727606008_admin' and OPERATION = '8' and ATTR1 = 'Alex.SNDEMO2-1';
+	String Department_QUERY = "select ATTR4 from IGACORE.EVENT_OUT where COD_OPERATION = '" + operationCode + "' and ATTR1 = '" + accountCode + "'";
+	ResultSet rs = sql.getCntSQL().getConnection().createStatement().executeQuery(Department_QUERY);
+	log.info("EXECUTE QUERY: " + Department_QUERY);
+
+	while (rs.next()) {
+		accountDepartmentSysID = rs.getString(1).trim();
+		log.info("Account erServiceNowDepartment detected from EVENT OUT Attr4: " + accountDepartmentSysID );
+	}
+	rs.close();
+
+	// use Default erServiceNowDepartment HR for account; if it was not detected from EVENT OUT and was empty originally
+	if ( accountDepartmentSysID == null ) {
+		accountDepartmentSysID = "93b25282c0a8000b0b55c8ab34e2f1e6";
+		log.info("Using Default Account erServiceNowDepartment as HR: " + accountDepartmentSysID );
+		} 
+
+	DataBeanAttribute dept = new DataBeanAttribute("erServiceNowDepartment");
+	dept.setNewValue(accountDepartmentSysID);
+	data.setDataBeanAttribute(dept);
+	event.setBean(data);
+
+	log.info("New Account erServiceNowDepartment value: " + data.getDataBeanAttribute("erServiceNowDepartment") );
+}
